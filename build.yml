@@ -1,0 +1,37 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Arrange files
+        run: |
+          mkdir -p src/main/kotlin
+          if [ -f App.kt ]; then mv App.kt src/main/kotlin/App.kt; fi
+          if [ -f AndroidManifest.xml ]; then mv AndroidManifest.xml src/main/AndroidManifest.xml; fi
+      - name: Build
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ambilight-apk
+          path: build/outputs/apk/debug/*.apk
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Ambilight build ${{ github.run_number }}
+          files: build/outputs/apk/debug/*.apk
