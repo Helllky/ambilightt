@@ -3,7 +3,15 @@ package com.example.ambilight
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.AlertDialog
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.os.PowerManager
+import android.provider.Settings
+import java.util.Calendar
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
@@ -139,6 +147,12 @@ pre{background:var(--field);border-radius:18px;padding:12px}
 .sh{font-size:14px;color:var(--mut);margin:6px 0 10px;font-weight:600}
 details.devmenu{margin-top:6px}
 details.devmenu summary{cursor:pointer;color:var(--mut);padding:10px 0;font-size:14px}
+
+.tm{font:inherit;font-size:36px;text-align:center;width:100%;padding:12px;border-radius:24px;border:1px solid var(--bd);background:var(--field);color:var(--tx);margin-bottom:16px}
+.days{display:flex;gap:6px}
+.days button{flex:1;min-width:0;padding:10px 0}
+.devrow{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.cnt{font-size:20px;font-weight:600}
 </style>
 </head>
 <body>
@@ -148,14 +162,7 @@ details.devmenu summary{cursor:pointer;color:var(--mut);padding:10px 0;font-size
 <p id="msg"></p>
 
 <div class="card">
-<h2>Устройства</h2>
-<div id="devs"></div>
-<div class="row" style="margin-top:10px">
-<button class="pri" id="add">+ Bluetooth-лента</button>
-<button id="demo">+ Демо-лампа</button>
-</div>
-<label class="hint" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rgbw"> Есть отдельный белый канал (RGBW)</label>
-<p class="hint">Приложение Zengge должно быть закрыто.</p>
+<div class="devrow"><div><h2 style="margin:0 0 4px">Устройства</h2><div id="devCount" class="cnt">Нет устройств</div></div><button class="pri" id="add">+ Добавить</button></div>
 </div>
 
 <div class="card">
@@ -177,6 +184,13 @@ details.devmenu summary{cursor:pointer;color:var(--mut);padding:10px 0;font-size
 <div class="row"><button class="big" id="openScenes">🎨 Выбрать сцену</button></div>
 </div>
 
+<div class="card" id="schedCard" hidden>
+<h2>⏰ Расписание</h2>
+<div id="schedList"></div>
+<div class="row" style="margin-top:10px"><button class="pri" id="addSched">+ Правило</button><button id="battBtn">Работа в фоне</button></div>
+<p class="hint">Лента включается и выключается сама, даже когда приложение закрыто. Телефон должен быть рядом с лентой. На Xiaomi и Redmi включите для Lumo «Автозапуск» и «Без ограничений» в разделе батареи.</p>
+</div>
+
 
 
 
@@ -192,12 +206,28 @@ details.devmenu summary{cursor:pointer;color:var(--mut);padding:10px 0;font-size
 <div id="setsheet" class="sheet" hidden>
 <div class="panel">
 <div class="ph"><b>Настройки</b><button class="ic" id="closeSet">✕</button></div>
+<h2 class="sh">Устройства</h2>
+<div id="devs"></div>
+<label class="hint" style="display:flex;gap:8px;align-items:center;margin:10px 0 20px"><input type="checkbox" id="rgbw"> Есть отдельный белый канал (RGBW)</label>
 <h2 class="sh">Тема оформления</h2>
 <div class="seg" id="themeSeg"><button data-t="auto">Авто</button><button data-t="light">Светлая</button><button data-t="dark">Тёмная</button></div>
 <details class="devmenu"><summary>Меню разработчика</summary>
 <p class="hint">Что отправлено на ленту:</p>
 <pre id="log">пусто</pre>
 </details>
+</div>
+</div>
+
+<div id="schedsheet" class="sheet" hidden>
+<div class="panel">
+<div class="ph"><b>Правило</b><button class="ic" id="closeSched">✕</button></div>
+<input type="time" id="stime" class="tm" value="22:00">
+<h2 class="sh">Действие</h2>
+<div class="seg" id="actSeg"><button data-a="on">Включить</button><button data-a="off">Выключить</button></div>
+<h2 class="sh">Дни</h2>
+<div class="days" id="daysBox"></div>
+<p class="hint" id="schedErr" style="color:#d9534f"></p>
+<div class="row" style="margin-top:14px"><button class="big pri" id="saveSched">Сохранить</button><button class="big" id="delSched">Удалить</button></div>
 </div>
 </div>
 
@@ -216,7 +246,8 @@ var P={
 };
 function rgb2hsv(r,g,b){r/=255;g/=255;b/=255;var mx=Math.max(r,g,b),mn=Math.min(r,g,b),dl=mx-mn,h=0;
  if(dl){if(mx===r)h=((g-b)/dl+6)%6;else if(mx===g)h=(b-r)/dl+2;else h=(r-g)/dl+4}
- return [Math.round(h*60),mx?Math.round(dl/mx*100):0,Math.round(mx*100)]}
+ return [Math.round(h*60),mx?Math.round(dl/mx*100):0,Math""",
+""".round(mx*100)]}
 P.ledwf={on:function(){return [0x3B,0x23,0,0,0,0,0,0,0,0x32,0,0]},off:function(){return [0x3B,0x24,0,0,0,0,0,0,0,0x32,0,0]},col:function(r,g,b){var m=rgb2hsv(r,g,b);return [0x3B,0xA1,Math.round(m[0]/2),m[1],m[2],0,0,0,0,0x32,0,0]}};
 P.ledwf2={on:P.ledwf.on,off:P.ledwf.off,col:function(r,g,b){return [0x31,r,g,b,0,0,0xF0,0x0F]}};
 P.wrap=function(d,p){if(d.proto.indexOf("ledwf")!==0)return p;var s=0;p.forEach(function(x){s=(s+x)&255});var n=p.length+1;d.seq=((d.seq||0)+1)&255;return [0,d.seq,0x80,0,0,n,n+1,0x0B].concat(p,[s])};
@@ -227,14 +258,15 @@ function hsv(h,s,v){s/=100;v/=100;var f=function(n){var k=(n+h/60)%6;return v-v*
 function saveName(d){if(d.demo||!d.dev)return;try{var m=JSON.parse(localStorage.getItem("lights-names")||"{}");m[d.dev.id]=d.name;localStorage.setItem("lights-names",JSON.stringify(m))}catch(e){}}
 function savedName(dev){try{return JSON.parse(localStorage.getItem("lights-names")||"{}")[dev.id]}catch(e){}}
 function render(){
+ var nOk=devices.filter(function(d){return d.ok}).length;
+ ${'$'}("devCount").textContent=devices.length?("Подключено: "+nOk+(nOk<devices.length?" из "+devices.length:"")):"Нет устройств";
  var el=${'$'}("devs");el.innerHTML="";
- if(!devices.length){el.innerHTML='<p class="hint" style="margin:0">Устройств нет. Добавьте ленту или демо-лампу.</p>'}
+ if(!devices.length){el.innerHTML='<p class="hint" style="margin:0">Устройств нет. Нажмите «+ Добавить» на главном экране.</p>'}
  devices.forEach(function(d){
   var row=document.createElement("div");row.className="dev";
   var dot=document.createElement("span");dot.className="dot";dot.style.background=d.on?d.css:"#000";
   var lb=document.createElement("label");
-  var cb=""",
-"""document.createElement("input");cb.type="checkbox";cb.checked=d.sel;cb.onchange=function(){d.sel=cb.checked};
+  var cb=document.createElement("input");cb.type="checkbox";cb.checked=d.sel;cb.onchange=function(){d.sel=cb.checked};
   var nm;
   if(d.editing){
    nm=document.createElement("input");nm.type="text";nm.className="nm";nm.maxLength=24;nm.value=(d.draft!=null?d.draft:d.name);
@@ -255,7 +287,7 @@ function render(){
   }
   var rm=document.createElement("button");rm.textContent="✕";rm.onclick=function(){
    if(d.dev&&d.dev.gatt&&d.dev.gatt.connected)d.dev.gatt.disconnect();
-   devices=devices.filter(function(x){return x!==d});render()};
+   devices=devices.filter(function(x){return x!==d});render();syncSched()};
   row.append(rm);el.append(row)});
  ${'$'}("preview").style.background=state.on?"rgb("+state.r+","+state.g+","+state.b+")":"#000";
 }
@@ -321,9 +353,10 @@ async function addBle(){
   var r=await connectGatt(dev);
   var d={id:nid++,name:savedName(dev)||dev.name||"Лента",dev:dev,char:r.ch,proto:/^LEDnetWF/i.test(dev.name||"")?"ledwf":r.proto,sel:true,ok:true,on:true,css:"rgb(255,140,0)"};
   dev.addEventListener("gattserverdisconnected",function(){d.ok=false;render()});
-  devices.push(d);
+  devices.push(d);syncSched();
   log(d.name+": "+r.info+", протокол "+d.proto);
-  msg("Подключено: "+d.name);render();
+  msg("Подключено: "+d.name);""",
+"""render();
  }catch(e){
   if(e.name==="NotFoundError")msg("Устройство не выбрано. Включите ленту, закройте приложение Zengge и попробуйте снова.");
   else if(e.name==="SecurityError"||/policy/i.test(e.message))msg("Браузер блокирует Bluetooth во встроенной странице. Откройте ссылку прямо в Chrome.");
@@ -353,10 +386,9 @@ ${'$'}("openScenes").onclick=function(){${'$'}("sheet").hidden=false};
 ${'$'}("closeScenes").onclick=function(){${'$'}("sheet").hidden=true};
 ${'$'}("sheet").onclick=function(e){if(e.target===${'$'}("sheet"))${'$'}("sheet").hidden=true};
 ${'$'}("scenes").addEventListener("click",function(e){if(e.target.closest("button"))${'$'}("sheet").hidden=true});
-${'$'}("demo").onclick=function(){nid++;devices.push({id:nid,name:"Лампа "+nid,demo:true,sel:true,on:true,css:"rgb("+state.r+","+state.g+","+state.b+")"});render()};
+
 ${'$'}("on").onclick=function(){send(function(d){return [P[d.proto].on()]},true)};
-${'$'}("off").onclick=function(){send(function(d){return [P[d.proto]""",
-""".off()]},false)};
+${'$'}("off").onclick=function(){send(function(d){return [P[d.proto].off()]},false)};
 ["hue","sat","bri"].forEach(function(i){${'$'}(i).oninput=fromSliders});
 
 var scenes=[
@@ -391,7 +423,7 @@ function sendFx(i){
 
 
 render();
-msg("Подключите ленту через Bluetooth или добавьте демо-лампу, чтобы посмотреть интерфейс.");
+msg("Нажмите «+ Добавить», чтобы подключить ленту. Приложение Zengge должно быть закрыто.");
 
 var themePref="auto";
 try{themePref=localStorage.getItem("lumo-theme")||"auto"}catch(e){}
@@ -408,6 +440,73 @@ ${'$'}("openSet").onclick=function(){${'$'}("setsheet").hidden=false};
 ${'$'}("closeSet").onclick=function(){${'$'}("setsheet").hidden=true};
 ${'$'}("setsheet").onclick=function(e){if(e.target===${'$'}("setsheet"))${'$'}("setsheet").hidden=true};
 applyTheme();
+
+/* ---- расписание ---- */
+var sched=[];
+try{sched=JSON.parse(localStorage.getItem("lumo-sched")||"[]")}catch(e){}
+var DORD=[1,2,3,4,5,6,0],DNAME={0:"Вс",1:"Пн",2:"Вт",3:"Ср",4:"Чт",5:"Пт",6:"Сб"},cur=null;
+function hasNative(){return typeof AndroidBle!=="undefined"}
+function syncSched(){
+ if(!hasNative())return;
+ var dv=devices.filter(function(d){return !d.demo&&d.dev}).map(function(d){var pr=P[d.proto];
+  return {a:d.dev.id,p:d.proto,c:d.char?d.char.uuid:"",on:pr.on(),off:pr.off()}});
+ var data={items:sched.map(function(x){return {id:String(x.id),t:x.t,d:x.d,a:x.a,e:x.e}}),devs:dv};
+ try{AndroidBle.invoke(0,"schedule",JSON.stringify(data))}catch(e){}
+}
+function schedSave(){
+ sched.sort(function(a,b){return a.t<b.t?-1:a.t>b.t?1:0});
+ try{localStorage.setItem("lumo-sched",JSON.stringify(sched))}catch(e){}
+ syncSched();renderSched();
+}
+function daysText(d){
+ var k=d.slice().sort().join();
+ if(d.length===7)return "Каждый день";
+ if(k==="1,2,3,4,5")return "Будни";
+ if(k==="0,6")return "Выходные";
+ return DORD.filter(function(n){return d.indexOf(n)>=0}).map(function(n){return DNAME[n]}).join(" ");
+}
+function renderSched(){
+ ${'$'}("schedCard").hidden=!hasNative();
+ var el=${'$'}("schedList");el.innerHTML="";
+ if(!sched.length){el.inner""",
+"""HTML='<p class="hint" style="margin:0">Правил пока нет.</p>';return}
+ sched.forEach(function(x){
+  var row=document.createElement("div");row.className="dev";
+  var cb=document.createElement("input");cb.type="checkbox";cb.checked=x.e;cb.onchange=function(){x.e=cb.checked;schedSave()};
+  var tx=document.createElement("div");tx.style.flex="1";tx.style.cursor="pointer";
+  var t=document.createElement("b");t.style.fontSize="22px";t.textContent=x.t;
+  var ac=document.createElement("span");ac.textContent="  "+(x.a==="on"?"Включить":"Выключить");
+  var sm=document.createElement("small");sm.style.display="block";sm.textContent=daysText(x.d);
+  tx.append(t,ac,sm);tx.onclick=function(){openSched(x)};
+  row.append(cb,tx);el.append(row)});
+}
+function paintSched(){
+ Array.prototype.forEach.call(${'$'}("daysBox").children,function(b){b.className=cur.d.indexOf(+b.getAttribute("data-d"))>=0?"pri":""});
+ Array.prototype.forEach.call(${'$'}("actSeg").children,function(b){b.className=b.getAttribute("data-a")===cur.a?"pri":""});
+}
+function openSched(x){
+ cur=x?{id:x.id,t:x.t,d:x.d.slice(),a:x.a,e:x.e}:{id:Date.now(),t:"22:00",d:[0,1,2,3,4,5,6],a:"off",e:true,isNew:true};
+ ${'$'}("stime").value=cur.t;${'$'}("schedErr").textContent="";
+ ${'$'}("delSched").style.display=x?"":"none";
+ paintSched();${'$'}("schedsheet").hidden=false;
+}
+DORD.forEach(function(n){var b=document.createElement("button");b.textContent=DNAME[n];b.setAttribute("data-d",n);
+ b.onclick=function(){var i=cur.d.indexOf(n);if(i>=0)cur.d.splice(i,1);else cur.d.push(n);paintSched()};${'$'}("daysBox").append(b)});
+Array.prototype.forEach.call(${'$'}("actSeg").children,function(b){b.onclick=function(){cur.a=b.getAttribute("data-a");paintSched()}});
+${'$'}("addSched").onclick=function(){openSched(null)};
+${'$'}("closeSched").onclick=function(){${'$'}("schedsheet").hidden=true};
+${'$'}("schedsheet").onclick=function(e){if(e.target===${'$'}("schedsheet"))${'$'}("schedsheet").hidden=true};
+${'$'}("saveSched").onclick=function(){
+ cur.t=${'$'}("stime").value||"22:00";
+ if(!cur.d.length){${'$'}("schedErr").textContent="Выберите хотя бы один день";return}
+ var i=-1;sched.forEach(function(x,k){if(x.id===cur.id)i=k});
+ var item={id:cur.id,t:cur.t,d:cur.d,a:cur.a,e:true};
+ if(i>=0){item.e=sched[i].e;sched[i]=item}else sched.push(item);
+ ${'$'}("schedsheet").hidden=true;schedSave();
+};
+${'$'}("delSched").onclick=function(){sched=sched.filter(function(x){return x.id!==cur.id});${'$'}("schedsheet").hidden=true;schedSave()};
+${'$'}("battBtn").onclick=function(){try{AndroidBle.invoke(0,"battery","{}")}catch(e){}};
+renderSched();
 </script>
 </body>
 </html>
@@ -419,14 +518,15 @@ applyTheme();
 class MainActivity : Activity() {
     private lateinit var web: WebView
     private val ui = Handler(Looper.getMainLooper())
-    private val gatts = ConcurrentHashMap<String, BluetoothGatt>()
-    private val chars = ConcurrentHashMap<String, BluetoothGattCharacteristic>()
+    private val gatts = AppState.gatts
+    private val chars = AppState.chars
     private val connectIds = ConcurrentHashMap<String, Int>()
     private var pendingScan: (() -> Unit)? = null
     private var pendingFail: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Scheduler.arm(applicationContext)
         window.statusBarColor = Color.parseColor("#F7EFE6")
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         web = WebView(this)
@@ -468,6 +568,16 @@ class MainActivity : Activity() {
                         resolve(id, "\"ok\"")
                     }
                     "connect" -> connect(id, a.getString("a"))
+                    "schedule" -> {
+                        Scheduler.save(applicationContext, args)
+                        resolve(id, "\"ok\"")
+                    }
+                    "battery" -> {
+                        runOnUiThread {
+                            try { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } catch (e: Exception) { }
+                        }
+                        resolve(id, "\"ok\"")
+                    }
                     "disconnect" -> {
                         gatts.remove(a.getString("a"))?.let { try { it.disconnect(); it.close() } catch (e: Exception) { } }
                         resolve(id, "\"ok\"")
@@ -655,5 +765,229 @@ class MainActivity : Activity() {
             if (!ok) { Thread.sleep(25); tries++ }
         }
         if (ok) resolve(id, "\"ok\"") else reject(id, "Запись не удалась")
+    }
+}
+
+
+/* ---------------- Расписание (работает при закрытом приложении) ---------------- */
+
+object AppState {
+    val gatts = ConcurrentHashMap<String, BluetoothGatt>()
+    val chars = ConcurrentHashMap<String, BluetoothGattCharacteristic>()
+}
+
+@SuppressLint("MissingPermission")
+@Suppress("DEPRECATION")
+fun writePkt(g: BluetoothGatt, c: BluetoothGattCharacteristic, pkt: ByteArray) {
+    val nr = (c.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
+    c.writeType = if (nr) BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE else BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+    c.value = pkt
+    g.writeCharacteristic(c)
+}
+
+@SuppressLint("MissingPermission")
+@Suppress("DEPRECATION")
+class OneShot(
+    private val ctx: Context,
+    private val addr: String,
+    private val uuid: String,
+    private val pkt: ByteArray,
+    private val onDone: () -> Unit
+) : BluetoothGattCallback() {
+    private var finished = false
+    private val h = Handler(Looper.getMainLooper())
+    private var gatt: BluetoothGatt? = null
+
+    private fun finish() {
+        if (finished) return
+        finished = true
+        try { gatt?.close() } catch (e: Exception) { }
+        onDone()
+    }
+
+    fun start() {
+        val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter
+        if (adapter == null || !adapter.isEnabled) { finish(); return }
+        try {
+            gatt = adapter.getRemoteDevice(addr).connectGatt(ctx, false, this, BluetoothDevice.TRANSPORT_LE)
+        } catch (e: Exception) { finish(); return }
+        h.postDelayed({ finish() }, 15000)
+    }
+
+    override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
+        if (newState == BluetoothProfile.STATE_CONNECTED) {
+            if (!g.requestMtu(185)) g.discoverServices()
+        } else {
+            finish()
+        }
+    }
+
+    override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) { g.discoverServices() }
+
+    override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+        val target = if (uuid.isEmpty()) "0000ff01-0000-1000-8000-00805f9b34fb" else uuid
+        var found: BluetoothGattCharacteristic? = null
+        for (s in g.services) for (ch in s.characteristics) if (ch.uuid.toString() == target) found = ch
+        val c = found
+        if (c == null) { g.disconnect(); return }
+        writePkt(g, c, pkt)
+        h.postDelayed({ g.disconnect() }, 500)
+    }
+}
+
+@SuppressLint("MissingPermission")
+object Scheduler {
+    private const val ACTION = "com.example.ambilight.ALARM"
+
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("lumo", Context.MODE_PRIVATE)
+
+    private fun root(ctx: Context): JSONObject =
+        try { JSONObject(prefs(ctx).getString("sched", "{}") ?: "{}") } catch (e: Exception) { JSONObject() }
+
+    fun save(ctx: Context, json: String) {
+        val inc = JSONObject(json)
+        val old = root(ctx)
+        if ((inc.optJSONArray("devs")?.length() ?: 0) == 0 && old.has("devs")) inc.put("devs", old.getJSONArray("devs"))
+        prefs(ctx).edit().putString("sched", inc.toString()).apply()
+        arm(ctx)
+    }
+
+    private fun hasDay(x: JSONObject, dow0: Int): Boolean {
+        val d = x.optJSONArray("d") ?: return false
+        for (i in 0 until d.length()) if (d.getInt(i) == dow0) return true
+        return false
+    }
+
+    private fun pending(ctx: Context): PendingIntent =
+        PendingIntent.getBroadcast(
+            ctx, 7, Intent(ctx, AlarmReceiver::class.java).setAction(ACTION),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    fun arm(ctx: Context) {
+        val am = ctx.getSystemService(AlarmManager::class.java) ?: return
+        val pi = pending(ctx)
+        am.cancel(pi)
+        val arr = root(ctx).optJSONArray("items") ?: return
+        val now = System.currentTimeMillis()
+        var best = Long.MAX_VALUE
+        for (i in 0 until arr.length()) {
+            val x = arr.getJSONObject(i)
+            if (!x.optBoolean("e", true)) continue
+            val parts = x.optString("t", "00:00").split(":")
+            for (off in 0..7) {
+                val c = Calendar.getInstance()
+                c.add(Calendar.DAY_OF_YEAR, off)
+                c.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
+                c.set(Calendar.MINUTE, parts[1].toInt())
+                c.set(Calendar.SECOND, 0)
+                c.set(Calendar.MILLISECOND, 0)
+                if (c.timeInMillis > now + 1000 && hasDay(x, c.get(Calendar.DAY_OF_WEEK) - 1)) {
+                    if (c.timeInMillis < best) best = c.timeInMillis
+                    break
+                }
+            }
+        }
+        if (best == Long.MAX_VALUE) return
+        try {
+            if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, best, pi)
+            } else {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, best, pi)
+            }
+        } catch (e: Exception) { }
+    }
+
+    private fun wrapLed(p: IntArray): ByteArray {
+        var sum = 0
+        for (b in p) sum = (sum + b) and 255
+        val n = p.size + 1
+        val seq = ((System.currentTimeMillis() / 1000) % 250).toInt() + 1
+        val full = IntArray(8 + p.size + 1)
+        val head = intArrayOf(0, seq, 0x80, 0, 0, n, n + 1, 0x0B)
+        System.arraycopy(head, 0, full, 0, 8)
+        System.arraycopy(p, 0, full, 8, p.size)
+        full[full.size - 1] = sum
+        return ByteArray(full.size) { full[it].toByte() }
+    }
+
+    fun runDue(ctx: Context, done: () -> Unit) {
+        val p = prefs(ctx)
+        val r = root(ctx)
+        val arr = r.optJSONArray("items") ?: JSONArray()
+        val devs = r.optJSONArray("devs") ?: JSONArray()
+        val now = System.currentTimeMillis()
+        var action: String? = null
+        for (i in 0 until arr.length()) {
+            val x = arr.getJSONObject(i)
+            if (!x.optBoolean("e", true)) continue
+            val parts = x.optString("t", "00:00").split(":")
+            val c = Calendar.getInstance()
+            c.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
+            c.set(Calendar.MINUTE, parts[1].toInt())
+            c.set(Calendar.SECOND, 0)
+            c.set(Calendar.MILLISECOND, 0)
+            val diff = now - c.timeInMillis
+            if (diff < -5000 || diff > 120000) continue
+            if (!hasDay(x, c.get(Calendar.DAY_OF_WEEK) - 1)) continue
+            val key = "last_" + x.optString("id")
+            if (p.getLong(key, 0L) == c.timeInMillis) continue
+            p.edit().putLong(key, c.timeInMillis).apply()
+            action = x.optString("a")
+        }
+        arm(ctx)
+        val act = action
+        if (act == null || devs.length() == 0) { done(); return }
+
+        var left = devs.length()
+        val lock = Any()
+        val finish: () -> Unit = {
+            var last = false
+            synchronized(lock) { left--; last = left == 0 }
+            if (last) done()
+        }
+        for (i in 0 until devs.length()) {
+            val d = devs.getJSONObject(i)
+            val addr = d.getString("a")
+            val uuid = d.optString("c")
+            val ja = d.getJSONArray(if (act == "on") "on" else "off")
+            val payload = IntArray(ja.length()) { ja.getInt(it) }
+            val pkt = if (d.optString("p").startsWith("ledwf")) wrapLed(payload)
+                      else ByteArray(payload.size) { payload[it].toByte() }
+            val g = AppState.gatts[addr]
+            val c = AppState.chars["$addr|$uuid"]
+            if (g != null && c != null) {
+                try { writePkt(g, c, pkt) } catch (e: Exception) { }
+                finish()
+            } else {
+                OneShot(ctx, addr, uuid, pkt, finish).start()
+            }
+        }
+    }
+}
+
+class AlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        val pr = goAsync()
+        val wl = ctx.getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "lumo:alarm")
+        wl.acquire(30000)
+        var fin = false
+        val end: () -> Unit = {
+            if (!fin) {
+                fin = true
+                try { if (wl.isHeld) wl.release() } catch (e: Exception) { }
+                pr.finish()
+            }
+        }
+        try {
+            Scheduler.runDue(ctx.applicationContext) { end() }
+        } catch (e: Exception) { end() }
+        Handler(Looper.getMainLooper()).postDelayed({ end() }, 25000)
+    }
+}
+
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        Scheduler.arm(ctx.applicationContext)
     }
 }
