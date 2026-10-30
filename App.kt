@@ -14,6 +14,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.location.LocationManager
 import android.os.Build
@@ -59,7 +60,7 @@ private val PAGE_PARTS = listOf(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Освещение</title>
+<title>Lumo</title>
 <style>
 :root{--bg:#f4f3f0;--card:#fff;--tx:#1d1d1f;--mut:#6b6b70;--bd:#e3e1dc;--ac:#e8890c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121214;--card:#1c1c20;--tx:#f2f2f4;--mut:#9a9aa2;--bd:#2e2e34;--ac:#ffa11f}}
@@ -117,8 +118,8 @@ pre{background:var(--field);border-radius:18px;padding:12px}
 .sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;background:rgba(30,20,14,.4);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 .sheet[hidden]{display:none}
 .panel{width:100%;max-width:520px;max-height:82vh;overflow:auto;background:var(--card-solid);color:var(--tx);border-radius:32px 32px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px));animation:up .25s ease}
-@keyframes up{from{transform:transla""",
-"""teY(40px);opacity:0}to{transform:none;opacity:1}}
+@keyframes up{from{transform:translateY(4""",
+"""0px);opacity:0}to{transform:none;opacity:1}}
 .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;font-size:20px}
 #scenes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 #scenes button{height:92px;border:0;border-radius:26px;font-size:16px;font-weight:600;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.25);box-shadow:0 8px 18px -10px rgba(0,0,0,.5)}
@@ -130,11 +131,19 @@ pre{background:var(--field);border-radius:18px;padding:12px}
 #scenes button:nth-child(6){background:linear-gradient(135deg,#5b3a52,#241526)}
 #scenes button:nth-child(7){background:linear-gradient(135deg,#46b8ff,#1f5fd6)}
 #scenes button:nth-child(8){background:linear-gradient(135deg,#6fd68a,#228a58)}
+
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:4px 0 14px}
+.seg{display:flex;gap:8px;margin-bottom:18px}
+.seg button{flex:1;padding:11px 8px}
+.sh{font-size:14px;color:var(--mut);margin:6px 0 10px;font-weight:600}
+details.devmenu{margin-top:6px}
+details.devmenu summary{cursor:pointer;color:var(--mut);padding:10px 0;font-size:14px}
 </style>
 </head>
 <body>
 <main>
-<h1>💡 Освещение комнаты</h1>
+<div class="top"><h1>💡 Lumo</h1><button class="ic" id="openSet" aria-label="Настройки">⚙</button></div>
 <div id="preview"></div>
 <p id="msg"></p>
 
@@ -170,16 +179,25 @@ pre{background:var(--field);border-radius:18px;padding:12px}
 
 
 
-<div class="card">
-<h2>Журнал (что отправлено на ленту)</h2>
-<pre id="log">пусто</pre>
-</div>
+
 </main>
 
 <div id="sheet" class="sheet" hidden>
 <div class="panel">
 <div class="ph"><b>Сцены</b><button class="ic" id="closeScenes">✕</button></div>
 <div id="scenes"></div>
+</div>
+</div>
+
+<div id="setsheet" class="sheet" hidden>
+<div class="panel">
+<div class="ph"><b>Настройки</b><button class="ic" id="closeSet">✕</button></div>
+<h2 class="sh">Тема оформления</h2>
+<div class="seg" id="themeSeg"><button data-t="auto">Авто</button><button data-t="light">Светлая</button><button data-t="dark">Тёмная</button></div>
+<details class="devmenu"><summary>Меню разработчика</summary>
+<p class="hint">Что отправлено на ленту:</p>
+<pre id="log">пусто</pre>
+</details>
 </div>
 </div>
 
@@ -215,7 +233,8 @@ function render(){
   var row=document.createElement("div");row.className="dev";
   var dot=document.createElement("span");dot.className="dot";dot.style.background=d.on?d.css:"#000";
   var lb=document.createElement("label");
-  var cb=document.createElement("input");cb.type="checkbox";cb.checked=d.sel;cb.onchange=function(){d.sel=cb.checked};
+  var cb=""",
+"""document.createElement("input");cb.type="checkbox";cb.checked=d.sel;cb.onchange=function(){d.sel=cb.checked};
   var nm;
   if(d.editing){
    nm=document.createElement("input");nm.type="text";nm.className="nm";nm.maxLength=24;nm.value=(d.draft!=null?d.draft:d.name);
@@ -227,8 +246,7 @@ function render(){
   var st=document.createElement("small");st.textContent=d.demo?"демо":(d.ok?"ок":"нет связи");
   lb.append(cb,nm,st);
   row.append(dot,lb);
-  var ed=document.createElement("button""",
-"""");ed.className="ic";ed.textContent="✎";ed.title="Переименовать";ed.onclick=function(){d.editing=true;render()};row.append(ed);
+  var ed=document.createElement("button");ed.className="ic";ed.textContent="✎";ed.title="Переименовать";ed.onclick=function(){d.editing=true;render()};row.append(ed);
   if(!d.demo){
    var sel=document.createElement("select");
    [["ledwf","LEDnetWF"],["ledwf2","LEDnetWF (RGB)"],["magic","Magic Home"],["elk","ELK-BLEDOM"]].forEach(function(o){var op=document.createElement("option");op.value=o[0];op.textContent=o[1];if(d.proto===o[0])op.selected=true;sel.append(op)});
@@ -337,15 +355,29 @@ ${'$'}("sheet").onclick=function(e){if(e.target===${'$'}("sheet"))${'$'}("sheet"
 ${'$'}("scenes").addEventListener("click",function(e){if(e.target.closest("button"))${'$'}("sheet").hidden=true});
 ${'$'}("demo").onclick=function(){nid++;devices.push({id:nid,name:"Лампа "+nid,demo:true,sel:true,on:true,css:"rgb("+state.r+","+state.g+","+state.b+")"});render()};
 ${'$'}("on").onclick=function(){send(function(d){return [P[d.proto].on()]},true)};
-${'$'}("off").onclick=function(){send(function(d){return [P[d.proto].off()]},false)};
+${'$'}("off").onclick=function(){send(function(d){return [P[d.proto]""",
+""".off()]},false)};
 ["hue","sat","bri"].forEach(function(i){${'$'}(i).oninput=fromSliders});
 
-var scenes=[["🕯 Тёплый",function(){white(+${'$'}("bri").value)}],["⚪ Белый",function(){white(100)}],["📖 Чтение",function(){setColor(255,170,80)}],["🎬 Кино",function(){setColor(40,20,90)}],["🌅 Закат",function(){setColor(255,70,10)}],["🌙 Ночник",function(){setColor(40,8,0)}],["🌊 Океан",function(){setColor(0,120,255)}],["🌿 Лес",function(){setColor(20,200,60)}]];
-scenes.forEach(function(s){var b=document.createElement("button");b.textContent=s[0];b.onclick=function(){state.mode=null;s[1]()};${'$'}("scenes").append(b)});
+var scenes=[
+ ["🕯 Тёплый",[255,185,100],"w"],["⚪ Белый",[255,255,255],"w100"],["☀️ Дневной",[205,228,255]],["❄️ Холодный",[160,200,255]],
+ ["📖 Чтение",[255,170,80]],["🎬 Кино",[40,20,90]],["🌅 Закат",[255,70,10]],["🌙 Ночник",[40,8,0]],
+ ["🔥 Камин",[255,90,10]],["🌇 Янтарь",[255,150,0]],["🍑 Персик",[255,140,110]],["🪸 Коралл",[255,80,90]],
+ ["🌸 Сакура",[255,120,170]],["✨ Романтика",[200,20,80]],["💜 Лаванда",[160,110,255]],["🍇 Виноград",[110,30,170]],
+ ["🌌 Космос",[30,20,140]],["🌊 Океан",[0,120,255]],["🧊 Лёд",[140,220,255]],["🍃 Мята",[90,255,170]],
+ ["🌿 Лес",[20,200,60]],["🌴 Тропики",[0,220,140]],["🍋 Лимон",[255,220,20]],["🟣 Неон",[255,0,200]]
+];
+scenes.forEach(function(s){
+ var b=document.createElement("button");b.textContent=s[0];
+ var c=s[1],mx=Math.max(c[0],c[1],c[2],1),n=c.map(function(x){return Math.round(x*255/mx)});
+ var lum=(n[0]*299+n[1]*587+n[2]*114)/1000,dk=function(x){return Math.round(x*.6)};
+ b.style.background="linear-gradient(135deg,rgb("+n.join(",")+"),rgb("+n.map(dk).join(",")+"))";
+ b.style.color=lum>170?"#33261f":"#fff";b.style.textShadow=lum>170?"none":"0 1px 6px rgba(0,0,0,.25)";
+ b.onclick=function(){state.mode=null;if(s[2]==="w")white(+${'$'}("bri").value);else if(s[2]==="w100")white(100);else setColor(c[0],c[1],c[2])};
+ ${'$'}("scenes").append(b)});
 
 var fx=[["🌈 Радуга",0x25],["💓 Пульс",0x26],["🔴 Пульс красный",0x27],["🟢 Пульс зелёный",0x28],["🔵 Пульс синий",0x29],["⚡ Стробоскоп",0x30],["🔀 Смена цвета",0x37],["✨ Плавно",0x38]];
-fx=[["🌈 Радуга",0x25],["🔴 Красный",0x26],["🟢 Зелёный""",
-"""",0x27],["🔵 Синий",0x28],["🟣 Фиолетовый",0x2B],["🟠 Красно-синий",0x2E],["⚡ Стробоскоп",0x30],["🎆 Скачки цвета",0x38]];
+fx=[["🌈 Радуга",0x25],["🔴 Красный",0x26],["🟢 Зелёный",0x27],["🔵 Синий",0x28],["🟣 Фиолетовый",0x2B],["🟠 Красно-синий",0x2E],["⚡ Стробоскоп",0x30],["🎆 Скачки цвета",0x38]];
 function sendFx(i){
  var pct=+${'$'}("spd").value,sp=Math.max(1,Math.round(32-pct*31/100));
  state.mode=i;
@@ -360,6 +392,22 @@ function sendFx(i){
 
 render();
 msg("Подключите ленту через Bluetooth или добавьте демо-лампу, чтобы посмотреть интерфейс.");
+
+var themePref="auto";
+try{themePref=localStorage.getItem("lumo-theme")||"auto"}catch(e){}
+function applyTheme(){
+ var sys=(typeof window.__sysDark==="boolean")?window.__sysDark:matchMedia("(prefers-color-scheme: dark)").matches;
+ var dark=themePref==="dark"||(themePref==="auto"&&sys);
+ document.documentElement.setAttribute("data-theme",dark?"dark":"light");
+ try{AndroidBle.invoke(0,"theme",JSON.stringify({dark:dark,bg:dark?"#17141d":"#f7efe6"}))}catch(e){}
+ Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"),function(b){b.className=b.getAttribute("data-t")===themePref?"pri":""});
+}
+Array.prototype.forEach.call(document.querySelectorAll("#themeSeg button"),function(b){
+ b.onclick=function(){themePref=b.getAttribute("data-t");try{localStorage.setItem("lumo-theme",themePref)}catch(e){}applyTheme()}});
+${'$'}("openSet").onclick=function(){${'$'}("setsheet").hidden=false};
+${'$'}("closeSet").onclick=function(){${'$'}("setsheet").hidden=true};
+${'$'}("setsheet").onclick=function(e){if(e.target===${'$'}("setsheet"))${'$'}("setsheet").hidden=true};
+applyTheme();
 </script>
 </body>
 </html>
@@ -387,7 +435,8 @@ class MainActivity : Activity() {
         web.settings.domStorageEnabled = true
         web.addJavascriptInterface(Bridge(), "AndroidBle")
         setContentView(web)
-        val html = PAGE_PARTS.joinToString("").replaceFirst("<head>", "<head><script>" + SHIM + "</script>")
+        val dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val html = PAGE_PARTS.joinToString("").replaceFirst("<head>", "<head><script>window.__sysDark=" + dark + ";" + SHIM + "</script>")
         web.loadDataWithBaseURL("https://lights.local/", html, "text/html", "utf-8", null)
     }
 
@@ -406,6 +455,18 @@ class MainActivity : Activity() {
                 val a = JSONObject(args)
                 when (method) {
                     "scan" -> runOnUiThread { startScan(id) }
+                    "theme" -> {
+                        val dark = a.optBoolean("dark")
+                        val bg = Color.parseColor(a.optString("bg", "#F7EFE6"))
+                        runOnUiThread {
+                            window.statusBarColor = bg
+                            window.navigationBarColor = bg
+                            web.setBackgroundColor(bg)
+                            window.decorView.systemUiVisibility =
+                                if (dark) 0 else (View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR)
+                        }
+                        resolve(id, "\"ok\"")
+                    }
                     "connect" -> connect(id, a.getString("a"))
                     "disconnect" -> {
                         gatts.remove(a.getString("a"))?.let { try { it.disconnect(); it.close() } catch (e: Exception) { } }
