@@ -175,8 +175,13 @@ details.devmenu summary{cursor:pointer;color:var(--mut);padding:10px 0;font-size
 <div class="card">
 <h2>Питание</h2>
 <div class="row"><button class="big pri" id="on">Включить</button><button class="big" id="off">Выключить</button></div>
+<div class="row" style="margin-top:10px"><button id="sleep" style="flex:1">🌙 Таймер сна: выкл</button></div>
 </div>
 
+<div class="card">
+<h2>Быстрые</h2>
+<div class="row" id="quick" style="gap:8px"></div>
+</div>
 <div class="card">
 <h2>Цвет</h2>
 <input type="range" id="hue" min="0" max="360" value="30">
@@ -207,6 +212,10 @@ details.devmenu summary{cursor:pointer;color:var(--mut);padding:10px 0;font-size
 <div class="panel">
 <div class="ph"><b>Сцены</b><button class="ic" id="closeScenes">✕</button></div>
 <div id="scenes"></div>
+<div class="row" style="margin-top:14px"><button id="pinMode" class="big" style="flex:1">📌 Закрепить</button></div>
+<h2 class="sh" style="margin:18px 0 8px">Своя сцена</h2>
+<div class="row"><input type="text" id="scnName" maxlength="20" placeholder="Название" style="flex:1;min-width:0;font:inherit;color:var(--tx);background:var(--field);border:1px solid var(--bd);border-radius:999px;padding:11px 16px"><button class="pri" id="saveScn">💾 Сохранить</button></div>
+<p class="hint">Сохраняется текущий цвет ленты. Закрепить можно до трёх сцен.</p>
 </div>
 </div>
 
@@ -244,7 +253,8 @@ var KNOWN=[0xFFE5,0xFFD5,0xFFFF,0xFFE0,0xFFD0,0xFFF0,0xFF00,0xFFB0,0xFEE0,"6e400
 var ${'$'}=function(i){return document.getElementById(i)};
 function msg(t){${'$'}("msg").textContent=t}
 function hex(a){return a.map(function(x){return ("0"+x.toString(16)).slice(-2)}).join(" ")}
-function log(t){logs.unshift(t);logs=logs.slice(0,10);${'$'}("log").textContent=logs.join("\n")}
+function log(t){logs.uns""",
+"""hift(t);logs=logs.slice(0,10);${'$'}("log").textContent=logs.join("\n")}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
 
 var P={
@@ -253,8 +263,7 @@ var P={
 };
 function rgb2hsv(r,g,b){r/=255;g/=255;b/=255;var mx=Math.max(r,g,b),mn=Math.min(r,g,b),dl=mx-mn,h=0;
  if(dl){if(mx===r)h=((g-b)/dl+6)%6;else if(mx===g)h=(b-r)/dl+2;else h=(r-g)/dl+4}
- return [Math.round(h*60),mx?Math.round(dl/mx*100):0,Math""",
-""".round(mx*100)]}
+ return [Math.round(h*60),mx?Math.round(dl/mx*100):0,Math.round(mx*100)]}
 P.ledwf={on:function(){return [0x3B,0x23,0,0,0,0,0,0,0,0x32,0,0]},off:function(){return [0x3B,0x24,0,0,0,0,0,0,0,0x32,0,0]},col:function(r,g,b){var m=rgb2hsv(r,g,b);return [0x3B,0xA1,Math.round(m[0]/2),m[1],m[2],0,0,0,0,0x32,0,0]}};
 P.ledwf2={on:P.ledwf.on,off:P.ledwf.off,col:function(r,g,b){return [0x31,r,g,b,0,0,0xF0,0x0F]}};
 P.wrap=function(d,p){if(d.proto.indexOf("ledwf")!==0)return p;var s=0;p.forEach(function(x){s=(s+x)&255});var n=p.length+1;d.seq=((d.seq||0)+1)&255;return [0,d.seq,0x80,0,0,n,n+1,0x0B].concat(p,[s])};
@@ -344,7 +353,8 @@ async function pump(d){
    }
    d.ok=true;
   }
- }catch(e){d.ok=false;log("ОШИБКА "+d.name+": "+e.message);msg("Ошибка связи с "+d.name+": "+e.message)}
+ }catch(e){d.ok=false;log("ОШИБКА "+d.name+": "+e.message);msg("Ошибка связи с "+""",
+"""d.name+": "+e.message)}
  d.busy=false;render();
 }
 
@@ -361,8 +371,7 @@ async function connectGatt(dev){
    if(!(p.write||p.writeWithoutResponse))continue;
    var u=cs[j].uuid.slice(4,8);
    if(["ffe9","ffd9","fff3","ff01"].indexOf(u)>=0)return {ch:cs[j],proto:u==="fff3"?"elk":(u==="ff01"?"ledwf":"magic"),info:"службы "+names.join(",")+", канал "+u};
-   if(!best)best={ch:cs[j],proto:"magic",info:"службы "+names.join(",")+", канал """",
-"""+u+" (неизвестный!)"};
+   if(!best)best={ch:cs[j],proto:"magic",info:"службы "+names.join(",")+", канал "+u+" (неизвестный!)"};
   }
  }
  if(!best)throw new Error("не найден канал записи, службы: "+names.join(","));
@@ -408,28 +417,67 @@ ${'$'}("add").onclick=addBle;
 ${'$'}("openScenes").onclick=function(){${'$'}("sheet").hidden=false};
 ${'$'}("closeScenes").onclick=function(){${'$'}("sheet").hidden=true};
 ${'$'}("sheet").onclick=function(e){if(e.target===${'$'}("sheet"))${'$'}("sheet").hidden=true};
-${'$'}("scenes").addEventListener("click",function(e){if(e.target.closest("button"))${'$'}("sheet").hidden=true});
+${'$'}("scenes").addEventListener("click",function(e){if(!pinMode&&e.target.closest("button"))${'$'}("sheet").hidden=true});
 
 ${'$'}("on").onclick=function(){send(function(d){return [P[d.proto].on()]},true)};
 ${'$'}("off").onclick=function(){send(function(d){return [P[d.proto].off()]},false)};
 ["hue","sat","bri"].forEach(function(i){${'$'}(i).oninput=fromSliders});
 
-var scenes=[
- ["🕯 Тёплый",[255,185,100],"w"],["⚪ Белый",[255,255,255],"w100"],["☀️ Дневной",[205,228,255]],["❄️ Холодный",[160,200,255]],
- ["📖 Чтение",[255,170,80]],["🎬 Кино",[40,20,90]],["🌅 Закат",[255,70,10]],["🌙 Ночник",[40,8,0]],
- ["🔥 Камин",[255,90,10]],["🌇 Янтарь",[255,150,0]],["🍑 Персик",[255,140,110]],["🪸 Коралл",[255,80,90]],
- ["🌸 Сакура",[255,120,170]],["✨ Романтика",[200,20,80]],["💜 Лаванда",[160,110,255]],["🍇 Виноград",[110,30,170]],
- ["🌌 Космос",[30,20,140]],["🌊 Океан",[0,120,255]],["🧊 Лёд",[140,220,255]],["🍃 Мята",[90,255,170]],
- ["🌿 Лес",[20,200,60]],["🌴 Тропики",[0,220,140]],["🍋 Лимон",[255,220,20]],["🟣 Неон",[255,0,200]]
+var SCN=[
+ {n:"🕯 Тёплый",w:"w"},{n:"⚪ Белый",w:"w100"},{n:"☀️ Дневной",c:[205,228,255]},{n:"❄️ Холодный",c:[160,200,255]},
+ {n:"📖 Чтение",c:[255,170,80]},{n:"🎬 Кино",c:[40,20,90]},{n:"🌅 Закат",c:[255,70,10]},{n:"🌙 Ночник",c:[40,8,0]},
+ {n:"🔥 Камин",c:[255,90,10]},{n:"🌇 Янтарь",c:[255,150,0]},{n:"🍑 Персик",c:[255,140,110]},{n:"🪸 Коралл",c:[255,80,90]},
+ {n:"🌸 Сакура",c:[255,120,170]},{n:"✨ Романтика",c:[200,20,80]},{n:"💜 Лаванда",c:[160,110,255]},{n:"🍇 Виноград",c:[110,30,170]},
+ {n:"🌌 Космос",c:[30,20,140]},{n:"🌊 Океан",c:[0,120,255]},{n:"🧊 Лёд",c:[140,220,255]},{n:"🍃 Мята",c:[90,255,170]},
+ {n:"🌿 Лес",c:[20,200,60]},{n:"🌴 Тропики",c:[0,220,140]},{n:"🍋 Лимон",c:[255,220,20]},{n:"🟣 Неон",c:[255,0,200]}
 ];
-scenes.forEach(function(s){
- var b=document.createElement("button");b.textContent=s[0];
- var c=s[1],mx=Math.max(c[0],c[1],c[2],1),n=c.map(function(x){return Math.round(x*255/mx)});
+var DEF_PINS=["🕯 Тёплый","🎬 Кино","🌅 Закат"];
+var pins=DEF_PINS,custom=[];
+try{var pp=JSON.parse(localStorage.getItem("lumo-pins")||"null");if(Array.isArray(pp))pins=pp}catch(e){}
+try{custom=JSON.parse(localStorage.getItem("lumo-scenes")||"[]")||[]}catch(e){custom=[]}
+var pinMode=false;
+function allScn(){return SCN.concat(custom)}
+function findScn(n){return allScn().filter(function(x){return x.n===n})[0]}
+function applyScn(s){state.mode=null;if(s.w==="w")white(+${'$'}("bri").value);else if(s.w==="w100")white(100);else setColor(s.c[0],s.c[1],s.c[2])}
+function tileBg(b,c){
+ var mx=Math.max(c[0],c[1],c[2],1),n=c.map(function(x){return Math.round(x*255/mx)});
  var lum=(n[0]*299+n[1]*587+n[2]*114)/1000,dk=function(x){return Math.round(x*.6)};
  b.style.background="linear-gradient(135deg,rgb("+n.join(",")+"),rgb("+n.map(dk).join(",")+"))";
  b.style.color=lum>170?"#33261f":"#fff";b.style.textShadow=lum>170?"none":"0 1px 6px rgba(0,0,0,.25)";
- b.onclick=function(){state.mode=null;if(s[2]==="w")white(+${'$'}("bri").value);else if(s[2]==="w100")white(100);else setColor(c[0],c[1],c[2])};
- ${'$'}("scenes").append(b)});
+}
+function saveQ(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function togglePin(n){
+ var i=pins.indexOf(n);
+ if(i>=0)pins.splice(i,1);else{if(pins.length>=3)pins.shift();pins.push(n)}
+ saveQ("lumo-pins",pins);renderScn();
+}
+function renderQuick(){
+ var q=${'$'}("quick");if(!q)return;q.innerHTML="";
+ var list=pins.map(findScn).filter(Boolean);
+ if(!list.length){q.innerHTML='<p class="hint" style="margin:0">Закрепите сцены в окне «Сцены» (📌).</p>';return}
+ list.forEach(function(s){var b=document.createElement("button");b.textContent=s.n;tileBg(b,s.c);b.style.flex="1";b.style.padding="16px 6px";b.onclick=function(){applyScn(s)};q.append(b)});
+}
+function renderScn(){
+ var box=${'$'}("scenes");box.innerHTML="";
+ allScn().forEach(function(s){
+  var b=document.createElement("button");
+  b.textContent=s.n+(pinMode&&pins.indexOf(s.n)>=0?" 📌":"");
+  tileBg(b,s.c);
+  b.onclick=function(){if(pinMode){togglePin(s.n);return}applyScn(s)};
+  box.append(b)});
+ renderQuick();
+}
+${'$'}("pinMode").onclick=function(){pinMode=!pinMode;this.textContent=pinMode?"Готово":"📌 Закрепить";this.className=pinMode?"pri big":"big";renderScn()};
+${'$'}("saveScn").onclick=function(){
+ var n=(${'$'}("scnName").value||"").trim()""",
+""";
+ if(!n){msg("Введите название сцены");return}
+ custom=custom.filter(function(x){return x.n!==n});
+ custom.push({n:n,c:[state.r,state.g,state.b]});
+ saveQ("lumo-scenes",custom);
+ ${'$'}("scnName").value="";renderScn();msg("Сцена «"+n+"» сохранена");
+};
+renderScn();
 
 var fx=[["🌈 Радуга",0x25],["💓 Пульс",0x26],["🔴 Пульс красный",0x27],["🟢 Пульс зелёный",0x28],["🔵 Пульс синий",0x29],["⚡ Стробоскоп",0x30],["🔀 Смена цвета",0x37],["✨ Плавно",0x38]];
 fx=[["🌈 Радуга",0x25],["🔴 Красный",0x26],["🟢 Зелёный",0x27],["🔵 Синий",0x28],["🟣 Фиолетовый",0x2B],["🟠 Красно-синий",0x2E],["⚡ Стробоскоп",0x30],["🎆 Скачки цвета",0x38]];
@@ -472,8 +520,7 @@ function hasNative(){return typeof AndroidBle!=="undefined"}
 function syncSched(){
  if(!hasNative())return;
  var dv=devices.filter(function(d){return !d.demo&&d.dev}).map(function(d){var pr=P[d.proto];
-  return {a:d.dev.id,p:d.proto,c:d.char?d.char.uuid:"",on:pr""",
-""".on(),off:pr.off()}});
+  return {a:d.dev.id,p:d.proto,c:d.char?d.char.uuid:"",on:pr.on(),off:pr.off()}});
  var data={items:sched.map(function(x){return {id:String(x.id),t:x.t,d:x.d,a:x.a,e:x.e}}),devs:dv};
  try{AndroidBle.invoke(0,"schedule",JSON.stringify(data))}catch(e){}
 }
@@ -534,7 +581,8 @@ renderSched();
 /* ---- память устройств ---- */
 async function restoreDevs(){
  if(typeof AndroidBle==="undefined"||!window.__bleDevice)return;
- var saved=[];try{saved=JSON.parse(localStorage.getItem("lumo-devs")||"[]")}catch(e){}
+""",
+""" var saved=[];try{saved=JSON.parse(localStorage.getItem("lumo-devs")||"[]")}catch(e){}
  if(!saved.length)return;
  saved.forEach(function(sv){
   var dev=window.__bleDevice(sv.id,sv.name||null);
@@ -555,6 +603,46 @@ document.addEventListener("visibilitychange",function(){
  render();
 });
 restoreDevs();
+
+/* ---- таймер сна: плавное затухание и выключение ---- */
+var SLP=[0,15,30,60],sleepMin=0,sleepEnd=0,sleepT=null,sleepBase=null;
+function sleepLabel(){
+ var b=${'$'}("sleep");
+ if(!sleepEnd){b.textContent="🌙 Таймер сна: выкл";return}
+ b.textContent="🌙 Сон через "+Math.max(1,Math.ceil((sleepEnd-Date.now())/60000))+" мин";
+}
+function sleepStop(){
+ sleepEnd=0;sleepMin=0;sleepBase=null;
+ if(sleepT)clearInterval(sleepT);
+ sleepT=null;sleepLabel();
+}
+function sleepTick(){
+ var left=sleepEnd-Date.now();
+ if(left<=0){
+  sleepStop();
+  send(function(d){return [P[d.proto].off()]},false);
+  msg("Спокойной ночи");
+  return;
+ }
+ if(left<60000&&state.on){
+  if(!sleepBase)sleepBase=[state.r,state.g,state.b];
+  if(Math.floor(left/1000)%5===0){
+   var k=left/60000;
+   setColor(Math.round(sleepBase[0]*k),Math.round(sleepBase[1]*k),Math.round(sleepBase[2]*k));
+  }
+ }
+ sleepLabel();
+}
+${'$'}("sleep").onclick=function(){
+ sleepMin=SLP[(SLP.indexOf(sleepMin)+1)%SLP.length];
+ sleepBase=null;
+ if(!sleepMin){sleepStop();msg("Таймер сна выключен");return}
+ sleepEnd=Date.now()+sleepMin*60000;
+ if(!sleepT)sleepT=setInterval(sleepTick,1000);
+ sleepLabel();
+ msg("Лента погаснет через "+sleepMin+" мин");
+};
+sleepLabel();
 </script>
 </body>
 </html>
