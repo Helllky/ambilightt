@@ -45,6 +45,7 @@ import java.util.concurrent.ConcurrentHashMap
 /* JS-прослойка: делает navigator.bluetooth рабочим внутри WebView через нативный Bluetooth */
 private const val SHIM = """
 (function(){
+window.onerror=function(m){window.__errShown=true;setTimeout(function(){var e=document.getElementById("msg");if(e)e.textContent="Ошибка страницы: "+m},0)};
 var pend={},nid=1,devs={};
 function hex(v){return Array.prototype.map.call(v,function(b){return ("0"+b.toString(16)).slice(-2)}).join("")}
 window.__bleResult=function(id,ok,data){var p=pend[id];if(!p)return;delete pend[id];
@@ -424,7 +425,7 @@ ${'$'}("off").onclick=function(){send(function(d){return [P[d.proto].off()]},fal
 ["hue","sat","bri"].forEach(function(i){${'$'}(i).oninput=fromSliders});
 
 var SCN=[
- {n:"🕯 Тёплый",w:"w"},{n:"⚪ Белый",w:"w100"},{n:"☀️ Дневной",c:[205,228,255]},{n:"❄️ Холодный",c:[160,200,255]},
+ {n:"🕯 Тёплый",w:"w",c:[255,185,100]},{n:"⚪ Белый",w:"w100",c:[255,255,255]},{n:"☀️ Дневной",c:[205,228,255]},{n:"❄️ Холодный",c:[160,200,255]},
  {n:"📖 Чтение",c:[255,170,80]},{n:"🎬 Кино",c:[40,20,90]},{n:"🌅 Закат",c:[255,70,10]},{n:"🌙 Ночник",c:[40,8,0]},
  {n:"🔥 Камин",c:[255,90,10]},{n:"🌇 Янтарь",c:[255,150,0]},{n:"🍑 Персик",c:[255,140,110]},{n:"🪸 Коралл",c:[255,80,90]},
  {n:"🌸 Сакура",c:[255,120,170]},{n:"✨ Романтика",c:[200,20,80]},{n:"💜 Лаванда",c:[160,110,255]},{n:"🍇 Виноград",c:[110,30,170]},
@@ -440,6 +441,7 @@ function allScn(){return SCN.concat(custom)}
 function findScn(n){return allScn().filter(function(x){return x.n===n})[0]}
 function applyScn(s){state.mode=null;if(s.w==="w")white(+${'$'}("bri").value);else if(s.w==="w100")white(100);else setColor(s.c[0],s.c[1],s.c[2])}
 function tileBg(b,c){
+ if(!c)c=[255,255,255];
  var mx=Math.max(c[0],c[1],c[2],1),n=c.map(function(x){return Math.round(x*255/mx)});
  var lum=(n[0]*299+n[1]*587+n[2]*114)/1000,dk=function(x){return Math.round(x*.6)};
  b.style.background="linear-gradient(135deg,rgb("+n.join(",")+"),rgb("+n.map(dk).join(",")+"))";
@@ -468,16 +470,16 @@ function renderScn(){
  renderQuick();
 }
 ${'$'}("pinMode").onclick=function(){pinMode=!pinMode;this.textContent=pinMode?"Готово":"📌 Закрепить";this.className=pinMode?"pri big":"big";renderScn()};
-${'$'}("saveScn").onclick=function(){
- var n=(${'$'}("scnName").value||"").trim()""",
-""";
+${'$'}("saveScn").on""",
+"""click=function(){
+ var n=(${'$'}("scnName").value||"").trim();
  if(!n){msg("Введите название сцены");return}
  custom=custom.filter(function(x){return x.n!==n});
  custom.push({n:n,c:[state.r,state.g,state.b]});
  saveQ("lumo-scenes",custom);
  ${'$'}("scnName").value="";renderScn();msg("Сцена «"+n+"» сохранена");
 };
-renderScn();
+try{renderScn()}catch(e){msg("Ошибка сцен: "+e.message)}
 
 var fx=[["🌈 Радуга",0x25],["💓 Пульс",0x26],["🔴 Пульс красный",0x27],["🟢 Пульс зелёный",0x28],["🔵 Пульс синий",0x29],["⚡ Стробоскоп",0x30],["🔀 Смена цвета",0x37],["✨ Плавно",0x38]];
 fx=[["🌈 Радуга",0x25],["🔴 Красный",0x26],["🟢 Зелёный",0x27],["🔵 Синий",0x28],["🟣 Фиолетовый",0x2B],["🟠 Красно-синий",0x2E],["⚡ Стробоскоп",0x30],["🎆 Скачки цвета",0x38]];
@@ -578,11 +580,11 @@ ${'$'}("delSched").onclick=function(){sched=sched.filter(function(x){return x.id
 ${'$'}("battBtn").onclick=function(){try{AndroidBle.invoke(0,"battery","{}")}catch(e){}};
 renderSched();
 
-/* ---- память устройств ---- */
+/* ---- память устройств ---""",
+"""- */
 async function restoreDevs(){
  if(typeof AndroidBle==="undefined"||!window.__bleDevice)return;
-""",
-""" var saved=[];try{saved=JSON.parse(localStorage.getItem("lumo-devs")||"[]")}catch(e){}
+ var saved=[];try{saved=JSON.parse(localStorage.getItem("lumo-devs")||"[]")}catch(e){}
  if(!saved.length)return;
  saved.forEach(function(sv){
   var dev=window.__bleDevice(sv.id,sv.name||null);
