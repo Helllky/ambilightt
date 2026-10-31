@@ -5,6 +5,12 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.AlertDialog
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.pm.ServiceInfo
+import android.os.IBinder
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -57,6 +63,7 @@ function mk(info){
    return {uuid:s.uuid,getCharacteristics:function(){return Promise.resolve(s.chars.map(function(c){return new Char(d.id,c)}))}}}))}};
  d.addEventListener=function(t,f){if(t==="gattserverdisconnected")d._l.push(f)};
  devs[d.id]=d;return d}
+window.__bleDevice=function(id,name){return mk({id:id,name:name})};
 window.__bleEvent=function(a){var d=devs[a];if(!d)return;d.gatt.connected=false;d._l.forEach(function(f){try{f({target:d})}catch(e){}})};
 Object.defineProperty(navigator,"bluetooth",{value:{requestDevice:function(){return call("scan").then(mk)}},configurable:true});
 })();
@@ -257,8 +264,24 @@ function hsv(h,s,v){s/=100;v/=100;var f=function(n){var k=(n+h/60)%6;return v-v*
 
 function saveName(d){if(d.demo||!d.dev)return;try{var m=JSON.parse(localStorage.getItem("lights-names")||"{}");m[d.dev.id]=d.name;localStorage.setItem("lights-names",JSON.stringify(m))}catch(e){}}
 function savedName(dev){try{return JSON.parse(localStorage.getItem("lights-names")||"{}")[dev.id]}catch(e){}}
+var _ka=null;
+function saveDevs(){
+ try{localStorage.setItem("lumo-devs",JSON.stringify(devices.filter(function(d){return !d.demo&&d.dev}).map(function(d){return {id:d.dev.id,name:d.dev.name||null,proto:d.proto,sel:d.sel}})))}catch(e){}
+}
+function watch(d){d.dev.addEventListener("gattserverdisconnected",function(){d.ok=false;render();reconnect(d,0)})}
+function reconnect(d,n){
+ if(n>12||devices.indexOf(d)<0||d.rc)return;
+ d.rc=true;
+ setTimeout(async function(){
+  d.rc=false;
+  if(devices.indexOf(d)<0||d.ok)return;
+  try{var r=await connectGatt(d.dev);d.char=r.ch;d.ok=true;render();log(d.name+": связь восстановлена")}
+  catch(e){reconnect(d,n+1)}
+ },2500*(n+1));
+}
 function render(){
  var nOk=devices.filter(function(d){return d.ok}).length;
+ var want=devices.length>0;if(want!==_ka){_ka=want;try{AndroidBle.invoke(0,"keepalive",JSON.stringify({on:want}))}catch(e){}}
  ${'$'}("devCount").textContent=devices.length?("Подключено: "+nOk+(nOk<devices.length?" из "+devices.length:"")):"Нет устройств";
  var el=${'$'}("devs");el.innerHTML="";
  if(!devices.length){el.innerHTML='<p class="hint" style="margin:0">Устройств нет. Нажмите «+ Добавить» на главном экране.</p>'}
@@ -266,7 +289,7 @@ function render(){
   var row=document.createElement("div");row.className="dev";
   var dot=document.createElement("span");dot.className="dot";dot.style.background=d.on?d.css:"#000";
   var lb=document.createElement("label");
-  var cb=document.createElement("input");cb.type="checkbox";cb.checked=d.sel;cb.onchange=function(){d.sel=cb.checked};
+  var cb=document.createElement("input");cb.type="checkbox";cb.checked=d.sel;cb.onchange=function(){d.sel=cb.checked;saveDevs()};
   var nm;
   if(d.editing){
    nm=document.createElement("input");nm.type="text";nm.className="nm";nm.maxLength=24;nm.value=(d.draft!=null?d.draft:d.name);
@@ -282,12 +305,12 @@ function render(){
   if(!d.demo){
    var sel=document.createElement("select");
    [["ledwf","LEDnetWF"],["ledwf2","LEDnetWF (RGB)"],["magic","Magic Home"],["elk","ELK-BLEDOM"]].forEach(function(o){var op=document.createElement("option");op.value=o[0];op.textContent=o[1];if(d.proto===o[0])op.selected=true;sel.append(op)});
-   sel.onchange=function(){d.proto=sel.value;log(d.name+": протокол "+d.proto)};
+   sel.onchange=function(){d.proto=sel.value;log(d.name+": протокол "+d.proto);saveDevs()};
    row.append(sel);
   }
   var rm=document.createElement("button");rm.textContent="✕";rm.onclick=function(){
    if(d.dev&&d.dev.gatt&&d.dev.gatt.connected)d.dev.gatt.disconnect();
-   devices=devices.filter(function(x){return x!==d});render();syncSched()};
+   devices=devices.filter(function(x){return x!==d});render();syncSched();saveDevs()};
   row.append(rm);el.append(row)});
  ${'$'}("preview").style.background=state.on?"rgb("+state.r+","+state.g+","+state.b+")":"#000";
 }
@@ -338,7 +361,8 @@ async function connectGatt(dev){
    if(!(p.write||p.writeWithoutResponse))continue;
    var u=cs[j].uuid.slice(4,8);
    if(["ffe9","ffd9","fff3","ff01"].indexOf(u)>=0)return {ch:cs[j],proto:u==="fff3"?"elk":(u==="ff01"?"ledwf":"magic"),info:"службы "+names.join(",")+", канал "+u};
-   if(!best)best={ch:cs[j],proto:"magic",info:"службы "+names.join(",")+", канал "+u+" (неизвестный!)"};
+   if(!best)best={ch:cs[j],proto:"magic",info:"службы "+names.join(",")+", канал """",
+"""+u+" (неизвестный!)"};
   }
  }
  if(!best)throw new Error("не найден канал записи, службы: "+names.join(","));
@@ -352,11 +376,10 @@ async function addBle(){
   msg("Подключаюсь к "+(dev.name||"устройству")+"…");
   var r=await connectGatt(dev);
   var d={id:nid++,name:savedName(dev)||dev.name||"Лента",dev:dev,char:r.ch,proto:/^LEDnetWF/i.test(dev.name||"")?"ledwf":r.proto,sel:true,ok:true,on:true,css:"rgb(255,140,0)"};
-  dev.addEventListener("gattserverdisconnected",function(){d.ok=false;render()});
-  devices.push(d);syncSched();
+  watch(d);
+  devices.push(d);syncSched();saveDevs();
   log(d.name+": "+r.info+", протокол "+d.proto);
-  msg("Подключено: "+d.name);""",
-"""render();
+  msg("Подключено: "+d.name);render();
  }catch(e){
   if(e.name==="NotFoundError")msg("Устройство не выбрано. Включите ленту, закройте приложение Zengge и попробуйте снова.");
   else if(e.name==="SecurityError"||/policy/i.test(e.message))msg("Браузер блокирует Bluetooth во встроенной странице. Откройте ссылку прямо в Chrome.");
@@ -449,7 +472,8 @@ function hasNative(){return typeof AndroidBle!=="undefined"}
 function syncSched(){
  if(!hasNative())return;
  var dv=devices.filter(function(d){return !d.demo&&d.dev}).map(function(d){var pr=P[d.proto];
-  return {a:d.dev.id,p:d.proto,c:d.char?d.char.uuid:"",on:pr.on(),off:pr.off()}});
+  return {a:d.dev.id,p:d.proto,c:d.char?d.char.uuid:"",on:pr""",
+""".on(),off:pr.off()}});
  var data={items:sched.map(function(x){return {id:String(x.id),t:x.t,d:x.d,a:x.a,e:x.e}}),devs:dv};
  try{AndroidBle.invoke(0,"schedule",JSON.stringify(data))}catch(e){}
 }
@@ -468,8 +492,7 @@ function daysText(d){
 function renderSched(){
  ${'$'}("schedCard").hidden=!hasNative();
  var el=${'$'}("schedList");el.innerHTML="";
- if(!sched.length){el.inner""",
-"""HTML='<p class="hint" style="margin:0">Правил пока нет.</p>';return}
+ if(!sched.length){el.innerHTML='<p class="hint" style="margin:0">Правил пока нет.</p>';return}
  sched.forEach(function(x){
   var row=document.createElement("div");row.className="dev";
   var cb=document.createElement("input");cb.type="checkbox";cb.checked=x.e;cb.onchange=function(){x.e=cb.checked;schedSave()};
@@ -507,6 +530,31 @@ ${'$'}("saveSched").onclick=function(){
 ${'$'}("delSched").onclick=function(){sched=sched.filter(function(x){return x.id!==cur.id});${'$'}("schedsheet").hidden=true;schedSave()};
 ${'$'}("battBtn").onclick=function(){try{AndroidBle.invoke(0,"battery","{}")}catch(e){}};
 renderSched();
+
+/* ---- память устройств ---- */
+async function restoreDevs(){
+ if(typeof AndroidBle==="undefined"||!window.__bleDevice)return;
+ var saved=[];try{saved=JSON.parse(localStorage.getItem("lumo-devs")||"[]")}catch(e){}
+ if(!saved.length)return;
+ saved.forEach(function(sv){
+  var dev=window.__bleDevice(sv.id,sv.name||null);
+  var d={id:nid++,name:savedName(dev)||sv.name||"Лента",dev:dev,char:null,proto:sv.proto||"ledwf",sel:sv.sel!==false,ok:false,on:true,css:"rgb(255,140,0)"};
+  watch(d);devices.push(d)});
+ render();syncSched();msg("Подключаюсь к сохранённым устройствам…");
+ for(var i=0;i<devices.length;i++){
+  var dd=devices[i];
+  try{var r=await connectGatt(dd.dev);dd.char=r.ch;dd.ok=true;log(dd.name+": подключено автоматически")}
+  catch(e){log(dd.name+": не удалось подключиться ("+e.message+")");reconnect(dd,0)}
+  render();
+ }
+ msg(devices.some(function(x){return x.ok})?"Устройства подключены":"Не удалось подключиться. Проверьте, что лента включена, а Zengge закрыт.");
+}
+document.addEventListener("visibilitychange",function(){
+ if(document.hidden)return;
+ devices.forEach(function(d){if(!d.demo&&d.dev&&!d.dev.gatt.connected){d.ok=false;reconnect(d,0)}});
+ render();
+});
+restoreDevs();
 </script>
 </body>
 </html>
@@ -526,6 +574,11 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
+        }
         Scheduler.arm(applicationContext)
         window.statusBarColor = Color.parseColor("#F7EFE6")
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
@@ -540,7 +593,15 @@ class MainActivity : Activity() {
         web.loadDataWithBaseURL("https://lights.local/", html, "text/html", "utf-8", null)
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        web.evaluateJavascript(
+            "(function(){var s=document.querySelector('.sheet:not([hidden])');if(s){s.hidden=true;return 1}return 0})()"
+        ) { r -> if (r != "1") moveTaskToBack(true) }
+    }
+
     override fun onDestroy() {
+        try { stopService(Intent(this, KeepService::class.java)) } catch (e: Exception) { }
         for (g in gatts.values) { try { g.disconnect(); g.close() } catch (e: Exception) { } }
         gatts.clear()
         super.onDestroy()
@@ -568,6 +629,16 @@ class MainActivity : Activity() {
                         resolve(id, "\"ok\"")
                     }
                     "connect" -> connect(id, a.getString("a"))
+                    "keepalive" -> {
+                        val keep = a.optBoolean("on")
+                        runOnUiThread {
+                            try {
+                                if (keep) startForegroundService(Intent(this@MainActivity, KeepService::class.java))
+                                else stopService(Intent(this@MainActivity, KeepService::class.java))
+                            } catch (e: Exception) { }
+                        }
+                        resolve(id, "\"ok\"")
+                    }
                     "schedule" -> {
                         Scheduler.save(applicationContext, args)
                         resolve(id, "\"ok\"")
@@ -989,5 +1060,33 @@ class AlarmReceiver : BroadcastReceiver() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
         Scheduler.arm(ctx.applicationContext)
+    }
+}
+
+/* Держит приложение живым и связь с лентой активной, пока устройства подключены */
+class KeepService : Service() {
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel("keep", "Связь с лентой", NotificationManager.IMPORTANCE_LOW))
+        val pi = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            PendingIntent.FLAG_IMMUTABLE
+        )
+        val n = Notification.Builder(this, "keep")
+            .setContentTitle("Lumo")
+            .setContentText("Связь с лентой активна")
+            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .build()
+        try {
+            startForeground(2, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        } catch (e: Exception) {
+            stopSelf()
+        }
+        return START_NOT_STICKY
     }
 }
