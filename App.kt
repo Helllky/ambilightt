@@ -924,7 +924,13 @@ class MainActivity : Activity() {
         gatts.remove(addr)?.let { try { it.disconnect(); it.close() } catch (e: Exception) { } }
         connectIds[addr] = id
         runOnUiThread {
-            gatts[addr] = adapter.getRemoteDevice(addr).connectGatt(this, false, cb, BluetoothDevice.TRANSPORT_LE)
+            val g = try { adapter.getRemoteDevice(addr).connectGatt(this, false, cb, BluetoothDevice.TRANSPORT_LE) } catch (e: Exception) { null }
+            if (g == null) {
+                connectIds.remove(addr)
+                reject(id, "Bluetooth выключен или нет разрешения. Включите Bluetooth и попробуйте снова.")
+                return@runOnUiThread
+            }
+            gatts[addr] = g
             ui.postDelayed({
                 if (connectIds[addr] == id) {
                     connectIds.remove(addr)
