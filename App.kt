@@ -5,6 +5,9 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.AlertDialog
+import android.provider.MediaStore
+import android.os.Environment
+import android.content.ContentValues
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -653,6 +656,19 @@ sleepLabel();
 
 @SuppressLint("MissingPermission", "SetJavaScriptEnabled")
 @Suppress("DEPRECATION")
+/* Пишет текст ошибки в «Загрузки/lumo-crash.txt», чтобы её можно было прислать */
+fun saveCrash(ctx: Context, e: Throwable) {
+    try {
+        val v = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, "lumo-crash.txt")
+            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+        }
+        val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v)
+        if (uri != null) ctx.contentResolver.openOutputStream(uri)?.use { it.write(e.stackTraceToString().toByteArray()) }
+    } catch (x: Exception) { }
+}
+
 class MainActivity : Activity() {
     private lateinit var web: WebView
     private val ui = Handler(Looper.getMainLooper())
@@ -664,12 +680,17 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prev = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            saveCrash(applicationContext, e)
+            prev?.uncaughtException(t, e)
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
         }
-        Scheduler.arm(applicationContext)
+        try { Scheduler.arm(applicationContext) } catch (e: Exception) { saveCrash(applicationContext, e) }
         window.statusBarColor = Color.parseColor("#F7EFE6")
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         web = WebView(this)
@@ -723,7 +744,11 @@ class MainActivity : Activity() {
                         val keep = a.optBoolean("on")
                         runOnUiThread {
                             try {
-                                if (keep) startForegroundService(Intent(this@MainActivity, KeepService::class.java))
+                                if (keep) {
+                                    val okPerm = Build.VERSION.SDK_INT < 31 ||
+                                        checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+                                    if (okPerm) startForegroundService(Intent(this@MainActivity, KeepService::class.java))
+                                }
                                 else stopService(Intent(this@MainActivity, KeepService::class.java))
                             } catch (e: Exception) { }
                         }
